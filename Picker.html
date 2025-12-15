@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <title>Meeting URL Picker</title>
+  <script src="office.js"></script>
+  <script src="picker.js"></script>
+  <style>
+    body { font-family: Arial; padding: 20px; }
+    .url-button {
+      display: block;
+      margin: 10px 0;
+      padding: 10px;
+      background: #0078d4;
+      color: white;
+      border-radius: 4px;
+      text-decoration: none;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+
+<h3>Select a meeting URL</h3>
+
+<button class="url-button" onclick="insertUrl('https://contoso.com/hr')">HR Meeting</button>
+<button class="url-button" onclick="insertUrl('https://contoso.com/interview')">Interview</button>
+<button class="url-button" onclick="insertUrl('https://contoso.com/onboard')">Onboarding</button>
+
+</body>
+</html>
