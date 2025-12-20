@@ -1,15 +1,19 @@
+/* global Office */
+
 Office.onReady(() => {});
 
-function action(event) {
-  const url = "https://localhost:3000/taskpane.html"; // or your production URL
+function open_youtube(event) {
+  const url = "https://www.youtube.com/";
 
-  // Best option when supported:
   if (Office?.context?.ui?.openBrowserWindow) {
     Office.context.ui.openBrowserWindow(url);
   } else {
-    // Fallback (may be blocked by pop-up settings)
     window.open(url, "_blank", "noopener,noreferrer");
   }
 
   event.completed();
+}
+
+if (typeof window !== "undefined") {
+  window.open_youtube = open_youtube;
 }
