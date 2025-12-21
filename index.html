@@ -17,12 +17,27 @@
     Continue to SharePoint
   </button>
 
-  <script>
-    const url = "https://M365t46240078.sharepoint.com/";
+  <pre id="debug" style="margin-top:12px; font-size:12px; opacity:.8; white-space:pre-wrap;"></pre>
 
-    async function openInTeamsBrowser() {
-      // Teams-supported way (preferred)
-      if (microsoftTeams?.pages?.openLink) {
+  <script>
+    const url = "https://m365t46240078.sharepoint.com/";
+
+    const statusEl = document.getElementById("status");
+    const btnEl = document.getElementById("open");
+    const dbgEl = document.getElementById("debug");
+
+    function log(msg) {
+      dbgEl.textContent += msg + "\n";
+    }
+
+    function showButton(message) {
+      statusEl.textContent = message;
+      btnEl.style.display = "inline-block";
+    }
+
+    async function openExternalPreferTeams() {
+      // Best in Teams: openLink (Teams decides external vs in-app per user setting/policy)
+      if (window.microsoftTeams?.pages?.openLink) {
         await microsoftTeams.pages.openLink(url);
         return;
       }
@@ -30,62 +45,76 @@
       window.open(url, "_blank", "noopener,noreferrer");
     }
 
-    function showButton(msg) {
-      document.getElementById("status").textContent = msg;
-      document.getElementById("open").style.display = "inline-block";
+    function redirectHere() {
+      window.location.replace(url);
     }
 
-    async function init() {
-      try {
+    async function tryGetHostWithTimeout(ms) {
+      // If SDK missing, immediately treat as unknown host
+      if (!window.microsoftTeams?.app?.initialize) {
+        return { host: "unknown", reason: "Teams SDK not available" };
+      }
+
+      const initAndContext = (async () => {
         await microsoftTeams.app.initialize();
         const ctx = await microsoftTeams.app.getContext();
         const host = (ctx?.app?.host?.name || "").toLowerCase();
+        return { host, reason: "context ok" };
+      })();
 
-        if (host === "outlook") {
-          // Outlook: redirect works fine
-          window.location.replace(url);
-          return;
-        }
+      const timeout = new Promise((resolve) =>
+        setTimeout(() => resolve({ host: "timeout", reason: `timeout ${ms}ms` }), ms)
+      );
 
-        if (host === "teams") {
-          // Teams: attempt auto-open ONCE per session
-          if (sessionStorage.getItem("autoTried")) {
-            showButton("Click to open SharePoint.");
-            return;
-          }
-          sessionStorage.setItem("autoTried", "1");
-
-          // Try auto-open, but it may be blocked by Teams policy
-          try {
-            await openInTeamsBrowser();
-            // Even if it opens, keep page simple
-            document.getElementById("status").textContent = "If nothing opened, click Continue.";
-            document.getElementById("open").style.display = "inline-block";
-          } catch (e) {
-            showButton("Auto-open was blocked. Click Continue to open SharePoint.");
-          }
-        }
-      } catch (e) {
-        // Not running inside Teams/Outlook or init failed
-        showButton("Click to open SharePoint.");
-      }
+      return Promise.race([initAndContext, timeout]);
     }
 
-    document.getElementById("open").addEventListener("click", async () => {
-      try {
-        // In Teams, openLink is best; outside Teams, window.open works
-        if (microsoftTeams?.app?.initialize) {
-          await microsoftTeams.app.initialize();
-          await openInTeamsBrowser();
-        } else {
-          window.open(url, "_blank", "noopener,noreferrer");
+    async function init() {
+      // Never let UI stay stuck: reveal button quickly
+      setTimeout(() => {
+        if (btnEl.style.display === "none") {
+          showButton("Click Continue to open SharePoint.");
+          log("UI fallback shown (init taking too long).");
         }
-      } catch {
-        window.open(url, "_blank", "noopener,noreferrer");
-      }
-    });
+      }, 1200);
 
-    window.addEventListener("DOMContentLoaded", init);
-  </script>
-</body>
-</html>
+      // Only attempt auto action once per session
+      if (sessionStorage.getItem("autoTried")) {
+        showButton("Click Continue to open SharePoint.");
+        log("Auto already tried this session.");
+        return;
+      }
+      sessionStorage.setItem("autoTried", "1");
+
+      const { host, reason } = await tryGetHostWithTimeout(1500);
+      log(`Host detect result: ${host} (${reason})`);
+
+      if (host === "outlook") {
+        log("Outlook detected → redirecting current view.");
+        redirectHere();
+        return;
+      }
+
+      if (host === "teams") {
+        // Auto-open attempt (may still be blocked by Teams rules)
+        try {
+          log("Teams detected → attempting openLink().");
+          await openExternalPreferTeams();
+
+          // Even if it works, keep button visible for “nothing happened” cases
+          showButton("If nothing opened, click Continue.");
+        } catch (e) {
+          log("openLink failed: " + (e?.message || e));
+          showButton("Auto-open was blocked. Click Continue.");
+        }
+        return;
+      }
+
+      // Unknown / timeout → just show button
+      showButton("Click Continue to open SharePoint.");
+    }
+
+    btnEl.addEventListener("click", async () => {
+      try {
+        // Try to detect Outlook quickly on click; otherwise open link
+        const { host } = await tryGetHos
