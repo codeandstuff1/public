@@ -4,125 +4,65 @@
   <meta charset="utf-8" />
   <title>Organization Portal</title>
 
-  <!-- Teams SDK -->
+  <!-- Teams SDK (optional) -->
   <script src="https://res.cdn.office.net/teams-js/2.0.0/js/MicrosoftTeams.min.js"></script>
-  <!-- Office.js (needed for Outlook openBrowserWindow) -->
-  <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
 </head>
 
 <body style="font-family:Segoe UI, Arial; padding:16px;">
   <h2>Organization portal</h2>
-  <p>Click the button to open SharePoint.</p>
+  <p>Click the button to open SharePoint in a new browser tab/window.</p>
 
   <button id="open" style="padding:12px 16px; font-size:14px;">
     Open SharePoint
   </button>
 
   <p style="margin-top:12px; font-size:13px;">
-    If nothing happens, use this link:
-    <a id="fallbackLink" target="_blank" rel="noopener noreferrer">Open SharePoint</a>
+    If nothing happens, click this link:
+    <a id="link" href="https://m365t46240078.sharepoint.com/" target="_blank" rel="noopener noreferrer">
+      https://m365t46240078.sharepoint.com/
+    </a>
   </p>
+
+  <div id="msg" style="margin-top:10px; font-size:12px; opacity:.85;"></div>
 
   <script>
     const url = "https://m365t46240078.sharepoint.com/";
-    document.getElementById("fallbackLink").href = url;
+    const msg = document.getElementById("msg");
+    const link = document.getElementById("link");
+    link.href = url;
+    link.textContent = url;
 
-    function withTimeout(promise, ms) {
-      return Promise.race([
-        promise,
-        new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), ms))
-      ]);
-    }
+    function show(s) { msg.textContent = s; }
 
-    async function getTeamsHostNameFast() {
-      if (!window.microsoftTeams?.app?.initialize || !window.microsoftTeams?.app?.getContext) return null;
+    async function openSharePoint() {
+      show("");
 
-      // Keep timeout short to avoid "stuck" behavior
-      await withTimeout(microsoftTeams.app.initialize(), 600);
-      const ctx = await withTimeout(microsoftTeams.app.getContext(), 600);
-
-      return (ctx?.app?.host?.name || "").toLowerCase();
-    }
-
-    function openInTeamsEveryTime() {
-      // Teams-supported open. Whether it uses default browser depends on Teams user setting/policy.
-      // But this is the best supported call from a Teams tab.
-      if (window.microsoftTeams?.pages?.openLink) {
-        return microsoftTeams.pages.openLink(url);
-      }
-      // Fallback
-      window.open(url, "_blank", "noopener,noreferrer");
-    }
-
-    function openInOutlookPreferInlineThenNewTab() {
-      // 1) Start a fallback timer to open a NEW browser tab
-      // If inline navigation succeeds, this page unloads and the timer won’t fire.
-      let fallbackFired = false;
-
-      const fallbackTimer = setTimeout(() => {
-        fallbackFired = true;
-
-        // Outlook best option: open default browser window/tab
-        if (window.Office?.context?.ui?.openBrowserWindow) {
-          Office.context.ui.openBrowserWindow(url);
-        } else {
-          window.open(url, "_blank", "noopener,noreferrer");
-        }
-      }, 1200);
-
-      // Cancel fallback if page unloads (navigation succeeded)
-      window.addEventListener("beforeunload", () => clearTimeout(fallbackTimer), { once: true });
-
-      // 2) Try inline load (automatic) — if allowed, user ends up on SharePoint right here
-      // If SharePoint/auth refuses to load in this frame, we’ll remain here and fallback opens a new tab.
+      // 1) If running in Teams tab surface, this is the best supported external opener.
       try {
-        window.location.assign(url);
-      } catch (e) {
-        clearTimeout(fallbackTimer);
-        // Immediate fallback
-        if (window.Office?.context?.ui?.openBrowserWindow) {
-          Office.context.ui.openBrowserWindow(url);
-        } else {
-          window.open(url, "_blank", "noopener,noreferrer");
-        }
-      }
-
-      return !fallbackFired;
-    }
-
-    async function handleClick() {
-      // Try Teams first (you said: in Teams open a new tab every time)
-      try {
-        const host = await getTeamsHostNameFast();
-        if (host === "teams") {
-          await openInTeamsEveryTime();
+        if (window.microsoftTeams?.pages?.openLink) {
+          // Don't call getContext. Don't wait on anything that can hang.
+          try { await microsoftTeams.app.initialize(); } catch {}
+          await microsoftTeams.pages.openLink(url);
+          show("Requested Teams to open the link.");
           return;
         }
-      } catch (_) {
-        // ignore and try Outlook path
+      } catch (e) {
+        show("Teams openLink failed, trying browser fallback…");
       }
 
-      // Outlook path (prefer inline load; if blocked, open new browser tab)
+      // 2) Browser fallback: programmatically click a real anchor (often more reliable than window.open in WebViews)
       try {
-        if (window.Office?.onReady) {
-          // Office.onReady can be slow; don't block too long on click
-          await withTimeout(Office.onReady(), 800);
-          const host = (Office?.context?.host || "").toLowerCase();
+        link.click();
+        show("Opened via browser link.");
+        return;
+      } catch {}
 
-          if (host === "outlook") {
-            openInOutlookPreferInlineThenNewTab();
-            return;
-          }
-        }
-      } catch (_) {
-        // ignore and fall back
-      }
-
-      // Generic fallback (browser/unknown host)
-      window.open(url, "_blank", "noopener,noreferrer");
+      // 3) Last resort
+      const w = window.open(url, "_blank", "noopener,noreferrer");
+      if (!w) show("Popup blocked. Please click the link shown above.");
     }
 
-    document.getElementById("open").addEventListener("click", handleClick);
+    document.getElementById("open").addEventListener("click", openSharePoint);
   </script>
 </body>
 </html>
