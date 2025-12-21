@@ -17,47 +17,86 @@
   </button>
 
   <script>
-    const url = "https://m365t01256007.sharepoint.com/";
+    const url = "https://m365t46240078.sharepoint.com/";
 
-    function openInBrowser() {
-      if (sessionStorage.getItem("portalOpened")) return;
-      sessionStorage.setItem("portalOpened", "true");
+    function oncePerSession(key) {
+      if (sessionStorage.getItem(key)) return false;
+      sessionStorage.setItem(key, "1");
+      return true;
+    }
 
+    async function openFromTeams() {
+      // Best: Teams-supported open in browser
+      if (microsoftTeams?.pages?.openLink) {
+        await microsoftTeams.pages.openLink(url);
+        return true;
+      }
+
+      // Fallback: may be blocked, but try
       window.open(url, "_blank", "noopener,noreferrer");
+      return true;
     }
 
     function redirectHere() {
+      // Replace avoids back-button loops
       window.location.replace(url);
     }
 
-    async function init() {
-      // If Teams SDK not present, do nothing
-      if (!window.microsoftTeams?.app) return;
+    async function initAuto() {
+      // Only attempt auto behavior once per session
+      if (!oncePerSession("portal_autorun_attempted")) return;
+
+      // If Teams SDK isn't available, do nothing (page stays with button)
+      if (!window.microsoftTeams?.app?.initialize) return;
 
       try {
         await microsoftTeams.app.initialize();
-        const context = await microsoftTeams.app.getContext();
 
-        const host = context.app.host.name;
+        const ctx = await microsoftTeams.app.getContext();
+        const host = (ctx?.app?.host?.name || "").toLowerCase();
 
         if (host === "teams") {
-          // Teams → open browser tab
-          openInBrowser();
-        }
-        else if (host === "outlook") {
-          // Outlook → redirect current view
+          // Teams: open in browser via openLink (reliable)
+          await openFromTeams();
+        } else if (host === "outlook") {
+          // Outlook: redirect current view straight to SharePoint
           redirectHere();
+        } else {
+          // Other host (office, etc.): do nothing automatically
         }
       } catch (e) {
-        console.warn("Host detection failed:", e);
+        // If init/getContext fails, don't break the page
+        console.warn("Teams init/getContext failed:", e);
       }
     }
 
-    // Button works everywhere
-    document.getElementById("open").onclick = openInBrowser;
+    // Button fallback: works everywhere
+    document.getElementById("open").addEventListener("click", async () => {
+      // If in Teams, prefer openLink; otherwise open normally
+      try {
+        if (window.microsoftTeams?.app?.initialize) {
+          await microsoftTeams.app.initialize();
+          const ctx = await microsoftTeams.app.getContext();
+          const host = (ctx?.app?.host?.name || "").toLowerCase();
 
-    // Auto-run
-    init();
+          if (host === "teams") {
+            await openFromTeams();
+            return;
+          }
+          if (host === "outlook") {
+            redirectHere();
+            return;
+          }
+        }
+      } catch (_) {
+        // ignore and fall back
+      }
+
+      window.open(url, "_blank", "noopener,noreferrer");
+    });
+
+    // Auto-run after DOM is ready
+    window.addEventListener("DOMContentLoaded", initAuto);
   </script>
 </body>
 </html>
