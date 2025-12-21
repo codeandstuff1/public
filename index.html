@@ -1,64 +1,91 @@
-
 <!doctype html>
 <html>
 <head>
   <meta charset="utf-8" />
   <title>Organization Portal</title>
-
-  <!-- Teams JS SDK v2 -->
   <script src="https://res.cdn.office.net/teams-js/2.0.0/js/MicrosoftTeams.min.js"></script>
 </head>
 
 <body style="font-family:Segoe UI, Arial; padding:16px;">
   <h2>Organization portal</h2>
-  <p>If you are not redirected automatically, click below.</p>
 
-  <button id="open" style="padding:10px 14px; font-size:14px;">
-    Open SharePoint
+  <div id="status" style="margin:12px 0; line-height:1.4;">
+    Opening SharePoint…
+  </div>
+
+  <button id="open" style="padding:10px 14px; font-size:14px; display:none;">
+    Continue to SharePoint
   </button>
 
   <script>
     const url = "https://m365t46240078.sharepoint.com/";
 
-    function openInBrowser() {
-      if (sessionStorage.getItem("portalOpened")) return;
-      sessionStorage.setItem("portalOpened", "true");
-
+    async function openInTeamsBrowser() {
+      // Teams-supported way (preferred)
+      if (microsoftTeams?.pages?.openLink) {
+        await microsoftTeams.pages.openLink(url);
+        return;
+      }
+      // Fallback
       window.open(url, "_blank", "noopener,noreferrer");
     }
 
-    function redirectHere() {
-      window.location.replace(url);
+    function showButton(msg) {
+      document.getElementById("status").textContent = msg;
+      document.getElementById("open").style.display = "inline-block";
     }
 
     async function init() {
-      // If Teams SDK not present, do nothing
-      if (!window.microsoftTeams?.app) return;
-
       try {
         await microsoftTeams.app.initialize();
-        const context = await microsoftTeams.app.getContext();
+        const ctx = await microsoftTeams.app.getContext();
+        const host = (ctx?.app?.host?.name || "").toLowerCase();
 
-        const host = context.app.host.name;
+        if (host === "outlook") {
+          // Outlook: redirect works fine
+          window.location.replace(url);
+          return;
+        }
 
         if (host === "teams") {
-          // Teams → open browser tab
-          openInBrowser();
-        }
-        else if (host === "outlook") {
-          // Outlook → redirect current view
-          redirectHere();
+          // Teams: attempt auto-open ONCE per session
+          if (sessionStorage.getItem("autoTried")) {
+            showButton("Click to open SharePoint.");
+            return;
+          }
+          sessionStorage.setItem("autoTried", "1");
+
+          // Try auto-open, but it may be blocked by Teams policy
+          try {
+            await openInTeamsBrowser();
+            // Even if it opens, keep page simple
+            document.getElementById("status").textContent = "If nothing opened, click Continue.";
+            document.getElementById("open").style.display = "inline-block";
+          } catch (e) {
+            showButton("Auto-open was blocked. Click Continue to open SharePoint.");
+          }
         }
       } catch (e) {
-        console.warn("Host detection failed:", e);
+        // Not running inside Teams/Outlook or init failed
+        showButton("Click to open SharePoint.");
       }
     }
 
-    // Button works everywhere
-    document.getElementById("open").onclick = openInBrowser;
+    document.getElementById("open").addEventListener("click", async () => {
+      try {
+        // In Teams, openLink is best; outside Teams, window.open works
+        if (microsoftTeams?.app?.initialize) {
+          await microsoftTeams.app.initialize();
+          await openInTeamsBrowser();
+        } else {
+          window.open(url, "_blank", "noopener,noreferrer");
+        }
+      } catch {
+        window.open(url, "_blank", "noopener,noreferrer");
+      }
+    });
 
-    // Auto-run
-    init();
+    window.addEventListener("DOMContentLoaded", init);
   </script>
 </body>
 </html>
