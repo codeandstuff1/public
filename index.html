@@ -3,112 +3,14 @@
 <head>
   <meta charset="utf-8" />
   <title>Organization Portal</title>
-
-  <!-- Teams SDK -->
-  <script src="https://res.cdn.office.net/teams-js/2.0.0/js/MicrosoftTeams.min.js"></script>
-  <!-- Office.js (helps Outlook add-in open external browser) -->
-  <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
 </head>
 
 <body style="font-family:Segoe UI, Arial; padding:16px;">
   <h2>Organization portal</h2>
 
-  <div id="status" style="margin:12px 0; line-height:1.4;">
-    Opening SharePoint…
-  </div>
 
-  <button id="open" style="padding:12px 16px; font-size:14px; display:none;">
-    Continue to SharePoint
-  </button>
 
-  <p style="margin-top:12px; font-size:13px;">
-    If nothing happens, click this link:
-    <a id="link" href="#" target="_blank" rel="noopener noreferrer">Open SharePoint</a>
-  </p>
+  <a href="https://m365t46240078.sharepoint.com/">Go to sharepoint</a>
 
-  <script>
-    const url = "https://m365t46240078.sharepoint.com/";
-    const statusEl = document.getElementById("status");
-    const buttonEl = document.getElementById("open");
-    const linkEl = document.getElementById("link");
-    linkEl.href = url;
-
-    function showButton(message) {
-      statusEl.textContent = message;
-      buttonEl.style.display = "inline-block";
-    }
-
-    async function openInTeams() {
-      // Best supported in Teams tab surface
-      if (window.microsoftTeams?.pages?.openLink) {
-        try { await microsoftTeams.app.initialize(); } catch {}
-        await microsoftTeams.pages.openLink(url);
-        return true;
-      }
-      return false;
-    }
-
-    function openInOutlook() {
-      // Best supported in Office add-ins (Outlook)
-      if (window.Office?.context?.ui?.openBrowserWindow) {
-        Office.context.ui.openBrowserWindow(url);
-        return true;
-      }
-      return false;
-    }
-
-    function openGeneric() {
-      // Anchor click is often more reliable than window.open in embedded WebViews
-      try {
-        linkEl.click();
-        return true;
-      } catch {}
-      const w = window.open(url, "_blank", "noopener,noreferrer");
-      return !!w;
-    }
-
-    async function openSharePointBestEffort() {
-      // Try Teams → Outlook → generic
-      try {
-        if (await openInTeams()) return true;
-      } catch {}
-
-      try {
-        if (openInOutlook()) return true;
-      } catch {}
-
-      return openGeneric();
-    }
-
-    async function initAutoOpen() {
-      // Only attempt once per session to avoid loops
-      if (sessionStorage.getItem("auto_open_attempted")) {
-        showButton("Click Continue to open SharePoint.");
-        return;
-      }
-      sessionStorage.setItem("auto_open_attempted", "1");
-
-      // Attempt auto-open immediately
-      const ok = await openSharePointBestEffort();
-
-      // Even if ok, keep a fallback button because hosts may ignore auto-open
-      if (ok) {
-        showButton("If nothing opened, click Continue.");
-      } else {
-        showButton("Auto-open was blocked. Click Continue to open SharePoint.");
-      }
-    }
-
-    // Reliable path: user click
-    buttonEl.addEventListener("click", async () => {
-      const ok = await openSharePointBestEffort();
-      if (!ok) {
-        showButton("Blocked by popup settings. Please click the link below.");
-      }
-    });
-
-    // Run on init
-    window.addEventListener("DOMContentLoaded", initAutoOpen);
-  </script>
 </body>
 </html>
