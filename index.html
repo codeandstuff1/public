@@ -17,27 +17,47 @@
   </button>
 
   <script>
-  const url = "https://m365t46240078.sharepoint.com/";
+    const url = "https://m365t46240078.sharepoint.com/";
 
-  async function init() {
-    try {
-      await microsoftTeams.app.initialize();
-      const ctx = await microsoftTeams.app.getContext();
-      const host = (ctx?.app?.host?.name || "").toLowerCase();
+    function openInBrowser() {
+      if (sessionStorage.getItem("portalOpened")) return;
+      sessionStorage.setItem("portalOpened", "true");
 
-      if (host === "teams") {
-        // Open externally (no iframe login)
-        await microsoftTeams.pages.openLink(url);
-      } else if (host === "outlook") {
-        // Outlook: full redirect is fine
-        window.location.replace(url);
-      }
-    } catch (e) {
-      console.warn(e);
+      window.open(url, "_blank", "noopener,noreferrer");
     }
-  }
 
-  window.addEventListener("DOMContentLoaded", init);
-</script>
+    function redirectHere() {
+      window.location.replace(url);
+    }
+
+    async function init() {
+      // If Teams SDK not present, do nothing
+      if (!window.microsoftTeams?.app) return;
+
+      try {
+        await microsoftTeams.app.initialize();
+        const context = await microsoftTeams.app.getContext();
+
+        const host = context.app.host.name;
+
+        if (host === "teams") {
+          // Teams → open browser tab
+          openInBrowser();
+        }
+        else if (host === "outlook") {
+          // Outlook → redirect current view
+          redirectHere();
+        }
+      } catch (e) {
+        console.warn("Host detection failed:", e);
+      }
+    }
+
+    // Button works everywhere
+    document.getElementById("open").onclick = openInBrowser;
+
+    // Auto-run
+    init();
+  </script>
 </body>
 </html>
