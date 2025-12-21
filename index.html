@@ -117,4 +117,21 @@
     btnEl.addEventListener("click", async () => {
       try {
         // Try to detect Outlook quickly on click; otherwise open link
-        const { host } = await tryGetHos
+        const { host } = await tryGetHostWithTimeout(800);
+        log(`Click host detect: ${host}`);
+
+        if (host === "outlook") {
+          redirectHere();
+        } else {
+          await openExternalPreferTeams();
+        }
+      } catch (e) {
+        log("Click handler failed: " + (e?.message || e));
+        window.open(url, "_blank", "noopener,noreferrer");
+      }
+    });
+
+    window.addEventListener("DOMContentLoaded", init);
+  </script>
+</body>
+</html>
