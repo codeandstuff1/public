@@ -4,8 +4,11 @@
   <meta charset="utf-8" />
   <title>Organization Portal</title>
 
-  <!-- Teams SDK is optional here -->
+  <!-- Teams SDK -->
   <script src="https://res.cdn.office.net/teams-js/2.0.0/js/MicrosoftTeams.min.js"></script>
+
+  <!-- Office.js (needed for Outlook openBrowserWindow) -->
+  <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
 </head>
 
 <body style="font-family:Segoe UI, Arial; padding:16px;">
@@ -16,24 +19,44 @@
     Open SharePoint
   </button>
 
+  <p style="margin-top:12px; font-size:13px;">
+    If nothing happens, use this link:
+    <a id="fallbackLink" href="https://m365t46240078.sharepoint.com/" target="_blank" rel="noopener noreferrer">
+      Open SharePoint
+    </a>
+  </p>
+
   <script>
     const url = "https://m365t46240078.sharepoint.com/";
+    document.getElementById("fallbackLink").href = url;
 
-    document.getElementById("open").addEventListener("click", async () => {
+    async function openSharePointInDefaultBrowser() {
+      // 1) Teams: prefer openLink
       try {
-        // If running in Teams, prefer the supported API
-        if (window.microsoftTeams?.pages?.openLink) {
+        if (window.microsoftTeams?.app?.initialize && window.microsoftTeams?.pages?.openLink) {
           await microsoftTeams.app.initialize();
           await microsoftTeams.pages.openLink(url);
           return;
         }
-      } catch {
-        // ignore and fall back
-      }
+      } catch (_) { /* fall through */ }
 
-      // Universal fallback (works everywhere)
-      window.open(url, "_blank", "noopener,noreferrer");
-    });
+      // 2) Outlook (Office.js): prefer openBrowserWindow (default browser)
+      try {
+        if (window.Office?.context?.ui?.openBrowserWindow) {
+          Office.context.ui.openBrowserWindow(url);
+          return;
+        }
+      } catch (_) { /* fall through */ }
+
+      // 3) Generic fallback
+      const w = window.open(url, "_blank", "noopener,noreferrer");
+      if (!w) {
+        // Popup blocked: user can click the anchor link
+        alert("Popup was blocked. Please click the link below to open SharePoint.");
+      }
+    }
+
+    document.getElementById("open").addEventListener("click", openSharePointInDefaultBrowser);
   </script>
 </body>
 </html>
