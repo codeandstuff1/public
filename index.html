@@ -3,27 +3,54 @@
 <head>
   <meta charset="utf-8" />
   <title>Organization Portal</title>
+
+  <!-- Teams JS SDK v2 -->
   <script src="https://res.cdn.office.net/teams-js/2.0.0/js/MicrosoftTeams.min.js"></script>
 </head>
+
 <body style="font-family:Segoe UI, Arial; padding:16px;">
   <h2>Organization portal</h2>
-  <p>Open the portal in your browser (recommended).</p>
+  <p>If this does not open automatically, click below.</p>
+
   <button id="open" style="padding:10px 14px; font-size:14px;">
     Open SharePoint
   </button>
 
   <script>
     const url = "https://m365t46240078.sharepoint.com/";
-    document.getElementById("open").onclick = async () => {
+
+    async function openPortal() {
+      // Prevent multiple opens
+      if (sessionStorage.getItem("portalOpened")) return;
+      sessionStorage.setItem("portalOpened", "true");
+
+      window.open(url, "_blank", "noopener,noreferrer");
+    }
+
+    async function init() {
+      // If Teams SDK not available → not Teams
+      if (!window.microsoftTeams?.app) return;
+
       try {
-        // Teams v2 SDK method (works in most modern clients)
         await microsoftTeams.app.initialize();
-        microsoftTeams.pages.navigateTo({ url }); // if supported
+
+        const context = await microsoftTeams.app.getContext();
+
+        // Only auto-open in Teams (not Outlook, not Office)
+        if (context.app.host.name === "teams") {
+          await openPortal();
+        }
       } catch (e) {
-        // Fallback
-        window.open(url, "_blank", "noopener,noreferrer");
+        // Ignore — user can click manually
+        console.warn("Teams init failed:", e);
       }
-    };
+    }
+
+    // Button fallback (works everywhere)
+    document.getElementById("open").onclick = openPortal;
+
+    // Auto-run on load
+    init();
   </script>
 </body>
 </html>
