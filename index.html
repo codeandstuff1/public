@@ -4,60 +4,125 @@
   <meta charset="utf-8" />
   <title>Organization Portal</title>
 
-  <!-- Teams JS SDK v2 -->
+  <!-- Teams SDK -->
   <script src="https://res.cdn.office.net/teams-js/2.0.0/js/MicrosoftTeams.min.js"></script>
+  <!-- Office.js (needed for Outlook openBrowserWindow) -->
+  <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
 </head>
 
 <body style="font-family:Segoe UI, Arial; padding:16px;">
   <h2>Organization portal</h2>
-  <p>If you are not redirected automatically, click below.</p>
+  <p>Click the button to open SharePoint.</p>
 
-  <button id="open" style="padding:10px 14px; font-size:14px;">
+  <button id="open" style="padding:12px 16px; font-size:14px;">
     Open SharePoint
   </button>
 
+  <p style="margin-top:12px; font-size:13px;">
+    If nothing happens, use this link:
+    <a id="fallbackLink" target="_blank" rel="noopener noreferrer">Open SharePoint</a>
+  </p>
+
   <script>
     const url = "https://m365t46240078.sharepoint.com/";
+    document.getElementById("fallbackLink").href = url;
 
-    function openInBrowser() {
-      if (sessionStorage.getItem("portalOpened")) return;
-      sessionStorage.setItem("portalOpened", "true");
+    function withTimeout(promise, ms) {
+      return Promise.race([
+        promise,
+        new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), ms))
+      ]);
+    }
 
+    async function getTeamsHostNameFast() {
+      if (!window.microsoftTeams?.app?.initialize || !window.microsoftTeams?.app?.getContext) return null;
+
+      // Keep timeout short to avoid "stuck" behavior
+      await withTimeout(microsoftTeams.app.initialize(), 600);
+      const ctx = await withTimeout(microsoftTeams.app.getContext(), 600);
+
+      return (ctx?.app?.host?.name || "").toLowerCase();
+    }
+
+    function openInTeamsEveryTime() {
+      // Teams-supported open. Whether it uses default browser depends on Teams user setting/policy.
+      // But this is the best supported call from a Teams tab.
+      if (window.microsoftTeams?.pages?.openLink) {
+        return microsoftTeams.pages.openLink(url);
+      }
+      // Fallback
       window.open(url, "_blank", "noopener,noreferrer");
     }
 
-    function redirectHere() {
-      window.location.replace(url);
-    }
+    function openInOutlookPreferInlineThenNewTab() {
+      // 1) Start a fallback timer to open a NEW browser tab
+      // If inline navigation succeeds, this page unloads and the timer won’t fire.
+      let fallbackFired = false;
 
-    async function init() {
-      // If Teams SDK not present, do nothing
-      if (!window.microsoftTeams?.app) return;
+      const fallbackTimer = setTimeout(() => {
+        fallbackFired = true;
 
+        // Outlook best option: open default browser window/tab
+        if (window.Office?.context?.ui?.openBrowserWindow) {
+          Office.context.ui.openBrowserWindow(url);
+        } else {
+          window.open(url, "_blank", "noopener,noreferrer");
+        }
+      }, 1200);
+
+      // Cancel fallback if page unloads (navigation succeeded)
+      window.addEventListener("beforeunload", () => clearTimeout(fallbackTimer), { once: true });
+
+      // 2) Try inline load (automatic) — if allowed, user ends up on SharePoint right here
+      // If SharePoint/auth refuses to load in this frame, we’ll remain here and fallback opens a new tab.
       try {
-        await microsoftTeams.app.initialize();
-        const context = await microsoftTeams.app.getContext();
-
-        const host = context.app.host.name;
-
-        if (host === "teams") {
-          // Teams → open browser tab
-          openInBrowser();
-        }
-        else if (host === "outlook") {
-          // Outlook → redirect current view
-          redirectHere();
-        }
+        window.location.assign(url);
       } catch (e) {
-        console.warn("Host detection failed:", e);
+        clearTimeout(fallbackTimer);
+        // Immediate fallback
+        if (window.Office?.context?.ui?.openBrowserWindow) {
+          Office.context.ui.openBrowserWindow(url);
+        } else {
+          window.open(url, "_blank", "noopener,noreferrer");
+        }
       }
+
+      return !fallbackFired;
     }
 
-    // Button works everywhere
-    document.getElementById("open").onclick = openInBrowser;
+    async function handleClick() {
+      // Try Teams first (you said: in Teams open a new tab every time)
+      try {
+        const host = await getTeamsHostNameFast();
+        if (host === "teams") {
+          await openInTeamsEveryTime();
+          return;
+        }
+      } catch (_) {
+        // ignore and try Outlook path
+      }
 
-    // Auto-run
-    init();
+      // Outlook path (prefer inline load; if blocked, open new browser tab)
+      try {
+        if (window.Office?.onReady) {
+          // Office.onReady can be slow; don't block too long on click
+          await withTimeout(Office.onReady(), 800);
+          const host = (Office?.context?.host || "").toLowerCase();
+
+          if (host === "outlook") {
+            openInOutlookPreferInlineThenNewTab();
+            return;
+          }
+        }
+      } catch (_) {
+        // ignore and fall back
+      }
+
+      // Generic fallback (browser/unknown host)
+      window.open(url, "_blank", "noopener,noreferrer");
+    }
+
+    document.getElementById("open").addEventListener("click", handleClick);
   </script>
 </body>
 </html>
