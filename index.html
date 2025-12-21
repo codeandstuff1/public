@@ -17,86 +17,28 @@
   </button>
 
   <script>
-    const url = "https://m365t46240078.sharepoint.com/";
+  const url = "https://m365t46240078.sharepoint.com/";
 
-    function oncePerSession(key) {
-      if (sessionStorage.getItem(key)) return false;
-      sessionStorage.setItem(key, "1");
-      return true;
-    }
+  async function init() {
+    try {
+      await microsoftTeams.app.initialize();
+      const ctx = await microsoftTeams.app.getContext();
+      const host = (ctx?.app?.host?.name || "").toLowerCase();
 
-    async function openFromTeams() {
-      // Best: Teams-supported open in browser
-      if (microsoftTeams?.pages?.openLink) {
+      if (host === "teams") {
+        // Open externally (no iframe login)
         await microsoftTeams.pages.openLink(url);
-        return true;
+      } else if (host === "outlook") {
+        // Outlook: full redirect is fine
+        window.location.replace(url);
       }
-
-      // Fallback: may be blocked, but try
-      window.open(url, "_blank", "noopener,noreferrer");
-      return true;
+    } catch (e) {
+      console.warn(e);
     }
+  }
 
-    function redirectHere() {
-      // Replace avoids back-button loops
-      window.location.replace(url);
-    }
+  window.addEventListener("DOMContentLoaded", init);
+</script>
 
-    async function initAuto() {
-      // Only attempt auto behavior once per session
-      if (!oncePerSession("portal_autorun_attempted")) return;
-
-      // If Teams SDK isn't available, do nothing (page stays with button)
-      if (!window.microsoftTeams?.app?.initialize) return;
-
-      try {
-        await microsoftTeams.app.initialize();
-
-        const ctx = await microsoftTeams.app.getContext();
-        const host = (ctx?.app?.host?.name || "").toLowerCase();
-
-        if (host === "teams") {
-          // Teams: open in browser via openLink (reliable)
-          await openFromTeams();
-        } else if (host === "outlook") {
-          // Outlook: redirect current view straight to SharePoint
-          redirectHere();
-        } else {
-          // Other host (office, etc.): do nothing automatically
-        }
-      } catch (e) {
-        // If init/getContext fails, don't break the page
-        console.warn("Teams init/getContext failed:", e);
-      }
-    }
-
-    // Button fallback: works everywhere
-    document.getElementById("open").addEventListener("click", async () => {
-      // If in Teams, prefer openLink; otherwise open normally
-      try {
-        if (window.microsoftTeams?.app?.initialize) {
-          await microsoftTeams.app.initialize();
-          const ctx = await microsoftTeams.app.getContext();
-          const host = (ctx?.app?.host?.name || "").toLowerCase();
-
-          if (host === "teams") {
-            await openFromTeams();
-            return;
-          }
-          if (host === "outlook") {
-            redirectHere();
-            return;
-          }
-        }
-      } catch (_) {
-        // ignore and fall back
-      }
-
-      window.open(url, "_blank", "noopener,noreferrer");
-    });
-
-    // Auto-run after DOM is ready
-    window.addEventListener("DOMContentLoaded", initAuto);
-  </script>
 </body>
 </html>
