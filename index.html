@@ -10,7 +10,7 @@
 
 <body style="font-family:Segoe UI, Arial; padding:16px;">
   <h2>Organization portal</h2>
-  <p>If this does not open automatically, click below.</p>
+  <p>If you are not redirected automatically, click below.</p>
 
   <button id="open" style="padding:10px 14px; font-size:14px;">
     Open SharePoint
@@ -19,37 +19,44 @@
   <script>
     const url = "https://m365t01256007.sharepoint.com/";
 
-    async function openPortal() {
-      // Prevent multiple opens
+    function openInBrowser() {
       if (sessionStorage.getItem("portalOpened")) return;
       sessionStorage.setItem("portalOpened", "true");
 
       window.open(url, "_blank", "noopener,noreferrer");
     }
 
+    function redirectHere() {
+      window.location.replace(url);
+    }
+
     async function init() {
-      // If Teams SDK not available → not Teams
+      // If Teams SDK not present, do nothing
       if (!window.microsoftTeams?.app) return;
 
       try {
         await microsoftTeams.app.initialize();
-
         const context = await microsoftTeams.app.getContext();
 
-        // Only auto-open in Teams (not Outlook, not Office)
-        if (context.app.host.name === "teams") {
-          await openPortal();
+        const host = context.app.host.name;
+
+        if (host === "teams") {
+          // Teams → open browser tab
+          openInBrowser();
+        }
+        else if (host === "outlook") {
+          // Outlook → redirect current view
+          redirectHere();
         }
       } catch (e) {
-        // Ignore — user can click manually
-        console.warn("Teams init failed:", e);
+        console.warn("Host detection failed:", e);
       }
     }
 
-    // Button fallback (works everywhere)
-    document.getElementById("open").onclick = openPortal;
+    // Button works everywhere
+    document.getElementById("open").onclick = openInBrowser;
 
-    // Auto-run on load
+    // Auto-run
     init();
   </script>
 </body>
