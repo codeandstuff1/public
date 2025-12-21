@@ -3,135 +3,37 @@
 <head>
   <meta charset="utf-8" />
   <title>Organization Portal</title>
+
+  <!-- Teams SDK is optional here -->
   <script src="https://res.cdn.office.net/teams-js/2.0.0/js/MicrosoftTeams.min.js"></script>
 </head>
 
 <body style="font-family:Segoe UI, Arial; padding:16px;">
   <h2>Organization portal</h2>
+  <p>Open the portal in your browser (recommended).</p>
 
-  <div id="status" style="margin:12px 0; line-height:1.4;">
-    Opening SharePoint…
-  </div>
-
-  <button id="open" style="padding:10px 14px; font-size:14px; display:none;">
-    Continue to SharePoint
+  <button id="open" style="padding:12px 16px; font-size:14px;">
+    Open SharePoint
   </button>
-
-  <pre id="debug" style="margin-top:12px; font-size:12px; opacity:.8; white-space:pre-wrap;"></pre>
 
   <script>
     const url = "https://m365t46240078.sharepoint.com/";
 
-    const statusEl = document.getElementById("status");
-    const btnEl = document.getElementById("open");
-    const dbgEl = document.getElementById("debug");
-
-    function log(msg) {
-      dbgEl.textContent += msg + "\n";
-    }
-
-    function showButton(message) {
-      statusEl.textContent = message;
-      btnEl.style.display = "inline-block";
-    }
-
-    async function openExternalPreferTeams() {
-      // Best in Teams: openLink (Teams decides external vs in-app per user setting/policy)
-      if (window.microsoftTeams?.pages?.openLink) {
-        await microsoftTeams.pages.openLink(url);
-        return;
-      }
-      // Fallback
-      window.open(url, "_blank", "noopener,noreferrer");
-    }
-
-    function redirectHere() {
-      window.location.replace(url);
-    }
-
-    async function tryGetHostWithTimeout(ms) {
-      // If SDK missing, immediately treat as unknown host
-      if (!window.microsoftTeams?.app?.initialize) {
-        return { host: "unknown", reason: "Teams SDK not available" };
-      }
-
-      const initAndContext = (async () => {
-        await microsoftTeams.app.initialize();
-        const ctx = await microsoftTeams.app.getContext();
-        const host = (ctx?.app?.host?.name || "").toLowerCase();
-        return { host, reason: "context ok" };
-      })();
-
-      const timeout = new Promise((resolve) =>
-        setTimeout(() => resolve({ host: "timeout", reason: `timeout ${ms}ms` }), ms)
-      );
-
-      return Promise.race([initAndContext, timeout]);
-    }
-
-    async function init() {
-      // Never let UI stay stuck: reveal button quickly
-      setTimeout(() => {
-        if (btnEl.style.display === "none") {
-          showButton("Click Continue to open SharePoint.");
-          log("UI fallback shown (init taking too long).");
-        }
-      }, 1200);
-
-      // Only attempt auto action once per session
-      if (sessionStorage.getItem("autoTried")) {
-        showButton("Click Continue to open SharePoint.");
-        log("Auto already tried this session.");
-        return;
-      }
-      sessionStorage.setItem("autoTried", "1");
-
-      const { host, reason } = await tryGetHostWithTimeout(1500);
-      log(`Host detect result: ${host} (${reason})`);
-
-      if (host === "outlook") {
-        log("Outlook detected → redirecting current view.");
-        redirectHere();
-        return;
-      }
-
-      if (host === "teams") {
-        // Auto-open attempt (may still be blocked by Teams rules)
-        try {
-          log("Teams detected → attempting openLink().");
-          await openExternalPreferTeams();
-
-          // Even if it works, keep button visible for “nothing happened” cases
-          showButton("If nothing opened, click Continue.");
-        } catch (e) {
-          log("openLink failed: " + (e?.message || e));
-          showButton("Auto-open was blocked. Click Continue.");
-        }
-        return;
-      }
-
-      // Unknown / timeout → just show button
-      showButton("Click Continue to open SharePoint.");
-    }
-
-    btnEl.addEventListener("click", async () => {
+    document.getElementById("open").addEventListener("click", async () => {
       try {
-        // Try to detect Outlook quickly on click; otherwise open link
-        const { host } = await tryGetHostWithTimeout(800);
-        log(`Click host detect: ${host}`);
-
-        if (host === "outlook") {
-          redirectHere();
-        } else {
-          await openExternalPreferTeams();
+        // If running in Teams, prefer the supported API
+        if (window.microsoftTeams?.pages?.openLink) {
+          await microsoftTeams.app.initialize();
+          await microsoftTeams.pages.openLink(url);
+          return;
         }
-      } catch (e) {
-        log("Click handler failed: " + (e?.message || e));
-        window.open(url, "_blank", "noopener,noreferrer");
+      } catch {
+        // ignore and fall back
       }
-    });
 
-    window.addEventListener("DOMContentLoaded", init);
+      // Universal fallback (works everywhere)
+      window.open(url, "_blank", "noopener,noreferrer");
+    });
   </script>
 </body>
 </html>
